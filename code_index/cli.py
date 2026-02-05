@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from .config import EmbeddingConfig
+from .config import EmbeddingConfig, VectorConfig
 from .errors import EmbeddingError, GitError, IndexingError
 
 
@@ -32,7 +32,16 @@ def cmd_init(args: argparse.Namespace) -> int:
             api_key=args.api_key,
             model=args.model,
         )
-        _, summary = init_repo_index(args.repo_path, args.persist_dir, embedding)
+        vector = VectorConfig.from_dict(
+            {
+                "device": args.device,
+                "metric": args.metric,
+                "search_mode": args.search_mode,
+                "approx": {"sample_rate": args.approx_sample_rate},
+                "max_vram_mb": args.max_vram_mb,
+            }
+        )
+        _, summary = init_repo_index(args.repo_path, args.persist_dir, embedding, vector)
         _write_json(
             {
                 "ok": True,
@@ -62,6 +71,10 @@ def cmd_search(args: argparse.Namespace) -> int:
             args.query,
             top_k=args.top_k,
             refresh=not args.no_refresh,
+            device=args.device,
+            search_mode=args.search_mode,
+            approx_sample_rate=args.approx_sample_rate,
+            max_vram_mb=args.max_vram_mb,
         )
         _write_json({"ok": True, "data": payload})
         return 0
@@ -91,7 +104,16 @@ def cmd_update(args: argparse.Namespace) -> int:
             api_key=args.api_key,
             model=args.model,
         )
-        summary = update_repo(args.repo_path, persist_dir, embedding)
+        vector = VectorConfig.from_dict(
+            {
+                "device": args.device,
+                "metric": args.metric,
+                "search_mode": args.search_mode,
+                "approx": {"sample_rate": args.approx_sample_rate},
+                "max_vram_mb": args.max_vram_mb,
+            }
+        )
+        summary = update_repo(args.repo_path, persist_dir, embedding, vector)
         _write_json(
             {
                 "ok": True,

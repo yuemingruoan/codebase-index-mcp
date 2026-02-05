@@ -8,7 +8,7 @@ from mcp.server import Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
-from .config import EmbeddingConfig
+from .config import EmbeddingConfig, VectorConfig
 from .errors import CodeIndexError, EmbeddingError, GitError, IndexingError
 from .indexer import init_repo_index
 from .operations import search_repo, status_repo, update_repo
@@ -88,7 +88,7 @@ TOOLS = [
                 "embedding": EMBEDDING_SCHEMA,
                 "vector": VECTOR_SCHEMA,
             },
-            "required": ["repo_path", "persist_dir", "embedding"],
+            "required": ["repo_path", "persist_dir", "embedding", "vector"],
             "additionalProperties": False,
         },
     ),
@@ -131,7 +131,7 @@ TOOLS = [
                 "embedding": EMBEDDING_SCHEMA,
                 "vector": VECTOR_SCHEMA,
             },
-            "required": ["repo_path", "embedding"],
+            "required": ["repo_path", "embedding", "vector"],
             "additionalProperties": False,
         },
     ),
@@ -144,15 +144,25 @@ async def list_tools():
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict):
-    try:
-        if name == "init":
-            embedding_config = EmbeddingConfig.from_dict(arguments["embedding"])
-            _, summary = init_repo_index(
-                arguments["repo_path"],
-                arguments["persist_dir"],
-                embedding_config,
-            )
+    async def call_tool(name: str, arguments: dict):
+        try:
+            if name == "init":
+                embedding_config = EmbeddingConfig.from_dict(arguments["embedding"])
+                vector_config = VectorConfig.from_dict(
+                    {
+                        "device": arguments["vector"]["device"],
+                        "metric": arguments["vector"]["metric"],
+                        "search_mode": arguments["vector"]["search_mode"],
+                        "approx": {"sample_rate": arguments["vector"]["approx_sample_rate"]},
+                        "max_vram_mb": arguments["vector"].get("max_vram_mb"),
+                    }
+                )
+                _, summary = init_repo_index(
+                    arguments["repo_path"],
+                    arguments["persist_dir"],
+                    embedding_config,
+                    vector_config,
+                )
             return {
                 "ok": True,
                 "data": {
@@ -172,6 +182,10 @@ async def call_tool(name: str, arguments: dict):
                 arguments["query"],
                 top_k=arguments.get("top_k", 10),
                 refresh=arguments.get("refresh", True),
+                device=arguments.get("device"),
+                search_mode=arguments.get("search_mode"),
+                approx_sample_rate=arguments.get("approx_sample_rate"),
+                max_vram_mb=arguments.get("max_vram_mb"),
             )
             return {"ok": True, "data": payload}
         if name == "status":
@@ -181,7 +195,16 @@ async def call_tool(name: str, arguments: dict):
         if name == "update":
             persist_dir = _require_persist_dir()
             embedding_config = EmbeddingConfig.from_dict(arguments["embedding"])
-            summary = update_repo(arguments["repo_path"], persist_dir, embedding_config)
+            vector_config = VectorConfig.from_dict(
+                {
+                    "device": arguments["vector"]["device"],
+                    "metric": arguments["vector"]["metric"],
+                    "search_mode": arguments["vector"]["search_mode"],
+                    "approx": {"sample_rate": arguments["vector"]["approx_sample_rate"]},
+                    "max_vram_mb": arguments["vector"].get("max_vram_mb"),
+                }
+            )
+            summary = update_repo(arguments["repo_path"], persist_dir, embedding_config, vector_config)
             return {
                 "ok": True,
                 "data": {
