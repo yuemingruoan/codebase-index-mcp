@@ -8,11 +8,13 @@ from .errors import CodeIndexError
 
 try:
     from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
+    from pymilvus.milvus_client.index import IndexParams
 except Exception as exc:  # pragma: no cover - exercised when pymilvus missing
     MilvusClient = None  # type: ignore[assignment]
     DataType = None  # type: ignore[assignment]
     FieldSchema = None  # type: ignore[assignment]
     CollectionSchema = None  # type: ignore[assignment]
+    IndexParams = None  # type: ignore[assignment]
     _IMPORT_ERROR = exc
 else:
     _IMPORT_ERROR = None
@@ -59,10 +61,15 @@ class VectorStore:
             schema=schema,
             metric_type=self._config.metric_type,
         )
+        index_params = IndexParams()
+        index_params.add_index(
+            field_name="embedding",
+            index_type="AUTOINDEX",
+            metric_type=self._config.metric_type,
+        )
         self._client.create_index(
             collection_name=self._config.collection,
-            field_name="embedding",
-            index_params={"index_type": "AUTOINDEX", "metric_type": self._config.metric_type},
+            index_params=index_params,
         )
 
     def insert(self, records: Iterable[VectorRecord]) -> int:
@@ -105,7 +112,15 @@ class VectorStore:
         for path in paths:
             expr = f'path == "{path}"'
             result = self._client.delete(collection_name=self._config.collection, filter=expr)
-            total_deleted += result.get("delete_count", 0)
+            delete_count = 0
+            if isinstance(result, dict):
+                delete_count = int(result.get("delete_count", 0))
+            elif isinstance(result, list):
+                if result and all(isinstance(item, dict) for item in result):
+                    delete_count = sum(int(item.get("delete_count", 0)) for item in result)
+                else:
+                    delete_count = len(result)
+            total_deleted += delete_count
         return total_deleted
 
     def drop(self) -> None:

@@ -17,13 +17,14 @@ class EmbeddingClient:
         http_client: httpx.Client | None = None,
     ) -> None:
         self._config = config
+        self._headers = {
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        }
         self._client = http_client or httpx.Client(
             base_url=config.base_url,
             timeout=timeout,
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._headers,
         )
         self._owns_client = http_client is None
 
@@ -35,7 +36,7 @@ class EmbeddingClient:
         payload = {"model": self._config.model, "input": list(texts)}
         if not payload["input"]:
             return []
-        response = self._client.post("/v1/embeddings", json=payload)
+        response = self._client.post("/v1/embeddings", json=payload, headers=self._headers)
         if response.status_code != 200:
             raise EmbeddingError(
                 "Embedding request failed",
