@@ -63,6 +63,19 @@ EMBEDDING_SCHEMA = {
     "additionalProperties": False,
 }
 
+VECTOR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "device": {"type": "string"},
+        "search_mode": {"type": "string"},
+        "metric": {"type": "string"},
+        "approx_sample_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "max_vram_mb": {"type": "integer", "minimum": 1},
+    },
+    "required": ["device", "search_mode", "metric", "approx_sample_rate"],
+    "additionalProperties": False,
+}
+
 TOOLS = [
     types.Tool(
         name="init",
@@ -73,6 +86,7 @@ TOOLS = [
                 "repo_path": {"type": "string"},
                 "persist_dir": {"type": "string"},
                 "embedding": EMBEDDING_SCHEMA,
+                "vector": VECTOR_SCHEMA,
             },
             "required": ["repo_path", "persist_dir", "embedding"],
             "additionalProperties": False,
@@ -88,6 +102,10 @@ TOOLS = [
                 "query": {"type": "string"},
                 "top_k": {"type": "integer", "minimum": 1, "maximum": 100},
                 "refresh": {"type": "boolean"},
+                "device": {"type": "string"},
+                "search_mode": {"type": "string"},
+                "approx_sample_rate": {"type": "number", "minimum": 0, "maximum": 1},
+                "max_vram_mb": {"type": "integer", "minimum": 1},
             },
             "required": ["repo_path", "query"],
             "additionalProperties": False,
@@ -111,6 +129,7 @@ TOOLS = [
             "properties": {
                 "repo_path": {"type": "string"},
                 "embedding": EMBEDDING_SCHEMA,
+                "vector": VECTOR_SCHEMA,
             },
             "required": ["repo_path", "embedding"],
             "additionalProperties": False,

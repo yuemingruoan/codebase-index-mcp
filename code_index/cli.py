@@ -5,10 +5,6 @@ import sys
 
 from .config import EmbeddingConfig
 from .errors import EmbeddingError, GitError, IndexingError
-from .indexer import init_repo_index
-from .mcp_server import run as run_mcp_server
-from .operations import search_repo, status_repo, update_repo
-from .store import StorageError
 
 
 def _write_json(payload: dict) -> None:
@@ -29,6 +25,8 @@ def _resolve_persist_dir(persist_dir: str | None) -> str:
 
 def cmd_init(args: argparse.Namespace) -> int:
     try:
+        from .indexer import init_repo_index
+
         embedding = EmbeddingConfig(
             base_url=args.base_url,
             api_key=args.api_key,
@@ -55,6 +53,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 def cmd_search(args: argparse.Namespace) -> int:
     try:
+        from .operations import search_repo
+
         persist_dir = _resolve_persist_dir(args.persist_dir)
         payload = search_repo(
             args.repo_path,
@@ -71,6 +71,8 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     try:
+        from .operations import status_repo
+
         persist_dir = _resolve_persist_dir(args.persist_dir)
         payload = status_repo(args.repo_path, persist_dir)
         _write_json({"ok": True, "data": payload})
@@ -81,6 +83,8 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_update(args: argparse.Namespace) -> int:
     try:
+        from .operations import update_repo
+
         persist_dir = _resolve_persist_dir(args.persist_dir)
         embedding = EmbeddingConfig(
             base_url=args.base_url,
@@ -108,11 +112,15 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     persist_dir = _resolve_persist_dir(args.persist_dir)
+    from .mcp_server import run as run_mcp_server
+
     run_mcp_server(persist_dir)
     return 0
 
 
 def _handle_cli_error(exc: Exception) -> int:
+    from .store import StorageError
+
     if isinstance(exc, IndexingError):
         _error_json(str(exc), "indexing error")
     elif isinstance(exc, EmbeddingError):
@@ -136,6 +144,32 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--base-url", required=True, help="OpenAI-compatible base URL")
     init_parser.add_argument("--api-key", required=True, help="OpenAI-compatible API key")
     init_parser.add_argument("--model", required=True, help="embedding model name")
+    init_parser.add_argument(
+        "--device",
+        default="auto",
+        help="vector device: auto/cuda/mps/cpu (default: auto)",
+    )
+    init_parser.add_argument(
+        "--search-mode",
+        default="exact",
+        help="search mode: exact/approx (default: exact)",
+    )
+    init_parser.add_argument(
+        "--metric",
+        default="ip",
+        help="vector metric: ip/l2 (default: ip)",
+    )
+    init_parser.add_argument(
+        "--approx-sample-rate",
+        type=float,
+        default=0.2,
+        help="approximate search sample rate (default: 0.2)",
+    )
+    init_parser.add_argument(
+        "--max-vram-mb",
+        type=int,
+        help="max VRAM to use in MB (optional)",
+    )
     init_parser.set_defaults(func=cmd_init)
 
     search_parser = subparsers.add_parser("search", help="search indexed repo")
@@ -144,6 +178,24 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--persist-dir", help="base directory for indexes")
     search_parser.add_argument("--top-k", type=int, default=10, help="max results")
     search_parser.add_argument("--no-refresh", action="store_true", help="skip incremental refresh")
+    search_parser.add_argument(
+        "--device",
+        help="vector device override: auto/cuda/mps/cpu",
+    )
+    search_parser.add_argument(
+        "--search-mode",
+        help="search mode override: exact/approx",
+    )
+    search_parser.add_argument(
+        "--approx-sample-rate",
+        type=float,
+        help="approximate search sample rate override",
+    )
+    search_parser.add_argument(
+        "--max-vram-mb",
+        type=int,
+        help="max VRAM to use in MB override",
+    )
     search_parser.set_defaults(func=cmd_search)
 
     status_parser = subparsers.add_parser("status", help="show index status")
@@ -157,6 +209,32 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--base-url", required=True, help="OpenAI-compatible base URL")
     update_parser.add_argument("--api-key", required=True, help="OpenAI-compatible API key")
     update_parser.add_argument("--model", required=True, help="embedding model name")
+    update_parser.add_argument(
+        "--device",
+        default="auto",
+        help="vector device: auto/cuda/mps/cpu (default: auto)",
+    )
+    update_parser.add_argument(
+        "--search-mode",
+        default="exact",
+        help="search mode: exact/approx (default: exact)",
+    )
+    update_parser.add_argument(
+        "--metric",
+        default="ip",
+        help="vector metric: ip/l2 (default: ip)",
+    )
+    update_parser.add_argument(
+        "--approx-sample-rate",
+        type=float,
+        default=0.2,
+        help="approximate search sample rate (default: 0.2)",
+    )
+    update_parser.add_argument(
+        "--max-vram-mb",
+        type=int,
+        help="max VRAM to use in MB (optional)",
+    )
     update_parser.set_defaults(func=cmd_update)
 
     serve_parser = subparsers.add_parser("serve", help="start MCP server")

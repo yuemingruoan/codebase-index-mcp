@@ -31,7 +31,7 @@
 ## 工作项清单
 | ID | 内容 | 完成状态 | 负责人 | 实施要点 | 验证方式 |
 | --- | --- | --- | --- | --- | --- |
-| T1 | 配置与参数设计 | [ ] | AI | 更新 `code_index/config.py`：新增 VectorConfig(device/metric/search_mode/approx_params/max_vram_mb)，替换 MilvusConfig；支持 `CODE_INDEX_MAX_VRAM_MB` 默认值；调整 RepoConfig 序列化；更新 `mcp_server.py`/`cli.py` 输入 schema 与参数（`--device`/`--search-mode`/`--metric`/`--approx-sample-rate`/`--max-vram-mb`） | `pytest -q tests/test_config.py`；`code-index init --help` 包含新参数 |
+| T1 | 配置与参数设计 | [x] | AI | 更新 `code_index/config.py`：新增 VectorConfig(device/metric/search_mode/approx_params/max_vram_mb)，替换 MilvusConfig；支持 `CODE_INDEX_MAX_VRAM_MB` 默认值；调整 RepoConfig 序列化；更新 `mcp_server.py`/`cli.py` 输入 schema 与参数（`--device`/`--search-mode`/`--metric`/`--approx-sample-rate`/`--max-vram-mb`） | `pytest -q tests/test_config.py`；`code-index init --help` 包含新参数 |
 | T2 | 设备检测与路由 | [ ] | AI | 新增 `code_index/device.py`：检测 CUDA/MPS；实现 auto 选择与 CPU 回退；提供统一 `resolve_device()` 给向量后端使用 | 新增/更新 `tests/test_device.py`；`pytest -q tests/test_device.py` |
 | T3 | 向量存储后端 | [ ] | AI | 实现 `VectorStore` 抽象；新增 TorchVectorStore（CPU/CUDA/MPS，矩阵乘法+topk，依据 max_vram_mb 分块计算）；定义持久化格式：`vectors/embeddings.pt`、`vectors/meta.json` | 新增 `tests/test_vector_store.py`；`pytest -q tests/test_vector_store.py` |
 | T4 | 索引/增量流程改造 | [ ] | AI | 更新 `code_index/indexer.py`/`operations.py` 调用新 VectorStore；处理 delete/insert 与必要的 index 重建；search_mode=approx 时按采样参数缩减候选并记录 | `pytest -q tests/test_incremental.py`；手测 `code-index init/search` |

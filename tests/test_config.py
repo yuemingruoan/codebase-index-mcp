@@ -1,11 +1,14 @@
 import os
 
+import pytest
+
 from code_index.config import (
+    ApproxConfig,
     ChunkingConfig,
     EmbeddingConfig,
-    MilvusConfig,
     RepoConfig,
     RepoFileMeta,
+    VectorConfig,
     load_repo_config,
     save_repo_config,
 )
@@ -30,7 +33,13 @@ def test_paths_helpers():
 def test_repo_config_roundtrip(tmp_path):
     embedding = EmbeddingConfig(base_url="http://example", api_key="k", model="m")
     chunking = ChunkingConfig(chunk_lines=80, overlap_lines=10)
-    milvus = MilvusConfig(uri=str(tmp_path / "milvus.db"), collection="code_index", dimension=None)
+    vector = VectorConfig(
+        device="auto",
+        metric="ip",
+        search_mode="exact",
+        approx=ApproxConfig(sample_rate=1.0),
+        max_vram_mb=256,
+    )
     config = RepoConfig(
         version=1,
         repo_root="/repo",
@@ -38,7 +47,7 @@ def test_repo_config_roundtrip(tmp_path):
         index_dir=str(tmp_path),
         embedding=embedding,
         chunking=chunking,
-        milvus=milvus,
+        vector=vector,
         files={"src/app.py": RepoFileMeta(hash="abc", line_count=12)},
         chunks_indexed=7,
         last_indexed_at="2024-01-01T00:00:00Z",
@@ -51,3 +60,42 @@ def test_repo_config_roundtrip(tmp_path):
     assert loaded.chunking.chunk_lines == config.chunking.chunk_lines
     assert loaded.files["src/app.py"].hash == "abc"
     assert loaded.chunks_indexed == 7
+
+
+def test_vector_config_env_default(monkeypatch):
+    monkeypatch.setenv("CODE_INDEX_MAX_VRAM_MB", "512")
+    config = VectorConfig.from_dict(
+        {
+            "device": "auto",
+            "metric": "ip",
+            "search_mode": "exact",
+            "approx": {"sample_rate": 1.0},
+        }
+    )
+    assert config.max_vram_mb == 512
+
+
+def test_vector_config_invalid_env(monkeypatch):
+    monkeypatch.setenv("CODE_INDEX_MAX_VRAM_MB", "nope")
+    with pytest.raises(ValueError):
+        VectorConfig.from_dict(
+            {
+                "device": "auto",
+                "metric": "ip",
+                "search_mode": "exact",
+                "approx": {"sample_rate": 1.0},
+            }
+        )
+
+
+def test_vector_config_invalid_sample_rate():
+    with pytest.raises(ValueError):
+        VectorConfig.from_dict(
+            {
+                "device": "auto",
+                "metric": "ip",
+                "search_mode": "approx",
+                "approx": {"sample_rate": 0.0},
+                "max_vram_mb": 256,
+            }
+        )
