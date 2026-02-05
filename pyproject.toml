@@ -4,4 +4,21 @@ version = "0.1.0"
 description = "An code repository indexing tool based on vector similarity(Without Qdrant)"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.27.0",
+    "mcp>=0.2.0",
+    "pymilvus[milvus_lite]>=2.4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+code-index = "code_index.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["code_index"]
