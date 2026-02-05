@@ -1,7 +1,7 @@
 [project]
 name = "codebase-index-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "An code repository indexing tool based on vector similarity(Without Qdrant)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
