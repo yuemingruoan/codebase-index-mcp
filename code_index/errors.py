@@ -7,3 +7,11 @@ class EmbeddingError(CodeIndexError):
         super().__init__(message)
         self.status_code = status_code
         self.detail = detail
+
+
+class GitError(CodeIndexError):
+    pass
+
+
+class IndexingError(CodeIndexError):
+    pass

@@ -108,7 +108,7 @@
 | T1 | 项目结构与配置模型 | [x] | AI | 规划 `code_index/` 包与模块边界；定义配置 JSON 结构（全局 embedding + 项目索引信息 + chunk 参数）；实现路径 hash 与持久化目录结构；在 `pyproject.toml` 增加依赖与 `code-index` 入口；优先用 apply_patch 修改 | 运行 `python -m code_index --help`；执行 `code-index init` 后生成配置文件与目录 |
 | T2 | OpenAI API 兼容 embedding 客户端 | [x] | AI | 使用 `httpx`/标准库实现 `/v1/embeddings` 调用；支持 base_url/api_key/model；实现批量、超时、错误处理；提供单测与 MockTransport | `pytest -q` 通过；手测返回向量长度与数量一致 |
 | T3 | Milvus Lite 存储层 | [x] | AI | 以 `pymilvus` Lite 模式创建 collection；设计 schema（vector + path + line_start + line_end + file_hash）；实现 insert/search/delete；支持按文件删除 | `pytest -q` 通过；手测 insert/search 返回结果 |
-| T4 | 索引流水线（初始化） | [ ] | AI | 使用 `git ls-files` 枚举已跟踪文件；文本检测过滤二进制；按行切分并记录行号范围；初始化时自动决定 chunk 策略并写入配置；批量 embedding 与入库 | 在小仓库执行 `code-index init <repo>`，索引数与 chunk 数合理 |
+| T4 | 索引流水线（初始化） | [x] | AI | 使用 `git ls-files` 枚举已跟踪文件；文本检测过滤二进制；按行切分并记录行号范围；初始化时自动决定 chunk 策略并写入配置；批量 embedding 与入库 | 在小仓库执行 `code-index init <repo>`，索引数与 chunk 数合理 |
 | T5 | 增量更新与删除处理 | [ ] | AI | 基于 git 变更检测（tracked 文件列表 + 内容 hash）识别新增/修改/删除；删除已移除文件的向量记录；更新元数据；增量更新与 search 入口联动 | 修改/删除文件后执行 `code-index search` 或增量入口，结果更新且无旧记录 |
 | T6 | MCP 工具与 CLI | [ ] | AI | 使用 MCP Python SDK 注册工具：init/search/status/update；按 MCP 工具规范实现输入输出与错误码；update 修改配置并触发全量重建；search 输出相对路径与行号范围 | `code-index serve` 启动；MCP 工具调用返回 JSON 符合约定 |
 | T7 | 测试与文档 | [ ] | AI | 增加单测与简单集成测试；更新 README（安装、init、search、update、持久化目录说明）；补充故障排查 | `pytest -q` 通过；README 示例可复现 |
