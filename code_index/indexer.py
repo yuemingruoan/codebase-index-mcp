@@ -9,9 +9,9 @@ from .chunking import chunk_text
 from .config import (
     ChunkingConfig,
     EmbeddingConfig,
-    MilvusConfig,
     RepoConfig,
     RepoFileMeta,
+    VectorConfig,
     ensure_server_config,
     load_repo_config,
     new_repo_config,
@@ -103,15 +103,11 @@ def _embed_and_insert(
     store: VectorStore,
     *,
     batch_size: int,
-    dimension: int | None = None,
-) -> tuple[int, int | None]:
+) -> int:
     total_inserted = 0
     for batch in _batched(chunks, batch_size):
         texts = [item[3] for item in batch]
         embeddings = embedding_client.embed_texts(texts)
-        if embeddings and dimension is None:
-            dimension = len(embeddings[0])
-            store.ensure_collection(dimension)
         records = [
             VectorRecord(
                 embedding=embeddings[idx],
@@ -123,13 +119,14 @@ def _embed_and_insert(
             for idx in range(len(batch))
         ]
         total_inserted += store.insert(records)
-    return total_inserted, dimension
+    return total_inserted
 
 
 def init_repo_index(
     repo_path: str,
     persist_dir: str,
     embedding: EmbeddingConfig,
+    vector: VectorConfig,
 ) -> tuple[RepoConfig, IndexSummary]:
     if not is_git_repo(repo_path):
         raise IndexingError("NOT_GIT_REPO")
@@ -142,30 +139,17 @@ def init_repo_index(
     ensure_server_config(persist_dir)
 
     chunking = choose_chunking()
-    milvus = MilvusConfig(
-        uri=os.path.join(vectors_dir, "milvus.db"),
-        collection="code_index",
-        dimension=None,
-    )
-    config = new_repo_config(repo_root, repo_hash, idx_dir, embedding, chunking, milvus)
+    config = new_repo_config(repo_root, repo_hash, idx_dir, embedding, chunking, vector)
 
     tracked_files = list_tracked_files(repo_root)
     chunks, file_metas = _collect_chunks(repo_root, tracked_files, chunking)
 
     embedding_client = EmbeddingClient(embedding)
-    store = VectorStore(milvus)
+    store = VectorStore(idx_dir, vector)
 
-    total_inserted, dimension = _embed_and_insert(
-        chunks, embedding_client, store, batch_size=DEFAULT_BATCH_SIZE
-    )
+    total_inserted = _embed_and_insert(chunks, embedding_client, store, batch_size=DEFAULT_BATCH_SIZE)
     embedding_client.close()
 
-    config.milvus = MilvusConfig(
-        uri=milvus.uri,
-        collection=milvus.collection,
-        dimension=dimension,
-        metric_type=milvus.metric_type,
-    )
     config.files = file_metas
     config.chunks_indexed = total_inserted
     config.last_indexed_at = _utc_now_iso()
@@ -187,6 +171,7 @@ def rebuild_repo_index(
     repo_path: str,
     persist_dir: str,
     embedding: EmbeddingConfig,
+    vector: VectorConfig,
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> tuple[RepoConfig, IndexSummary]:
@@ -199,28 +184,18 @@ def rebuild_repo_index(
     if not os.path.exists(idx_dir):
         raise IndexingError("NOT_INITIALIZED")
     config = load_repo_config(idx_dir)
-    vectors_dir = os.path.join(idx_dir, "vectors")
-    os.makedirs(vectors_dir, exist_ok=True)
-
-    store = VectorStore(config.milvus)
+    store = VectorStore(idx_dir, vector)
     store.drop()
 
     config.embedding = embedding
+    config.vector = vector
     tracked_files = list_tracked_files(repo_root)
     chunks, file_metas = _collect_chunks(repo_root, tracked_files, config.chunking)
 
     embedding_client = EmbeddingClient(embedding)
-    total_inserted, dimension = _embed_and_insert(
-        chunks, embedding_client, store, batch_size=batch_size
-    )
+    total_inserted = _embed_and_insert(chunks, embedding_client, store, batch_size=batch_size)
     embedding_client.close()
 
-    config.milvus = MilvusConfig(
-        uri=config.milvus.uri,
-        collection=config.milvus.collection,
-        dimension=dimension,
-        metric_type=config.milvus.metric_type,
-    )
     config.files = file_metas
     config.chunks_indexed = total_inserted
     config.last_indexed_at = _utc_now_iso()
@@ -283,9 +258,7 @@ def incremental_update(
     plan = compute_incremental_plan(repo_root, tracked_files, config)
     to_delete = sorted(set(plan.removed + plan.new_or_changed))
 
-    store = VectorStore(config.milvus)
-    if config.milvus.dimension is not None:
-        store.ensure_collection(config.milvus.dimension)
+    store = VectorStore(idx_dir, config.vector)
     deleted_count = 0
     if to_delete:
         deleted_count = store.delete_by_paths(to_delete)
@@ -310,13 +283,9 @@ def incremental_update(
 
     embedding_client = EmbeddingClient(config.embedding)
     total_inserted = 0
-    dimension = config.milvus.dimension
     for batch in _batched(chunks, batch_size):
         texts = [item[3] for item in batch]
         embeddings = embedding_client.embed_texts(texts)
-        if embeddings and dimension is None:
-            dimension = len(embeddings[0])
-            store.ensure_collection(dimension)
         records = [
             VectorRecord(
                 embedding=embeddings[idx],
@@ -330,13 +299,6 @@ def incremental_update(
         total_inserted += store.insert(records)
     embedding_client.close()
 
-    if dimension != config.milvus.dimension:
-        config.milvus = MilvusConfig(
-            uri=config.milvus.uri,
-            collection=config.milvus.collection,
-            dimension=dimension,
-            metric_type=config.milvus.metric_type,
-        )
     config.chunks_indexed = max(config.chunks_indexed - deleted_count, 0) + total_inserted
     config.last_indexed_at = _utc_now_iso()
     config.last_indexed_commit = get_head_commit(repo_root)

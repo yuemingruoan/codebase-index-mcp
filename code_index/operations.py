@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 
-from .config import EmbeddingConfig, load_repo_config
+from .config import EmbeddingConfig, VectorConfig, load_repo_config
 from .errors import IndexingError
 from .indexer import IndexSummary, incremental_update, rebuild_repo_index
-from .paths import hash_repo_path, index_dir, normalize_repo_path, repo_config_path
+from .paths import hash_repo_path, normalize_repo_path, repo_config_path
 from .embedding import EmbeddingClient
 from .git_utils import get_repo_root, is_git_repo
 from .store import VectorStore
@@ -35,6 +35,13 @@ def status_repo(repo_path: str, persist_dir: str) -> dict:
         "chunks_indexed": config.chunks_indexed,
         "embedding": {"model": config.embedding.model},
         "chunking": config.chunking.to_dict(),
+        "vector": {
+            "device": config.vector.device,
+            "metric": config.vector.metric,
+            "search_mode": config.vector.search_mode,
+            "approx_sample_rate": config.vector.approx.sample_rate,
+            "max_vram_mb": config.vector.max_vram_mb,
+        },
         "last_indexed_at": config.last_indexed_at,
         "last_indexed_commit": config.last_indexed_commit,
     }
@@ -47,19 +54,27 @@ def search_repo(
     *,
     top_k: int = 10,
     refresh: bool = True,
+    device: str | None = None,
+    search_mode: str | None = None,
+    approx_sample_rate: float | None = None,
+    max_vram_mb: int | None = None,
 ) -> dict:
     if refresh:
         config, _ = incremental_update(repo_path, persist_dir)
     else:
         _, _, _, config, _ = _load_config(repo_path, persist_dir)
-    if config.milvus.dimension is None:
-        raise IndexingError("CONFIG_INVALID")
     embedding_client = EmbeddingClient(config.embedding)
     vector = embedding_client.embed_text(query)
     embedding_client.close()
-    store = VectorStore(config.milvus)
-    store.ensure_collection(config.milvus.dimension)
-    results = store.search(vector, top_k=top_k)
+    store = VectorStore(config.index_dir, config.vector)
+    results = store.search(
+        vector,
+        top_k=top_k,
+        device=device,
+        search_mode=search_mode,
+        approx_sample_rate=approx_sample_rate,
+        max_vram_mb=max_vram_mb,
+    )
     return {"results": [{"path": r["path"], "line_start": r["line_start"], "line_end": r["line_end"]} for r in results]}
 
 
@@ -67,6 +82,7 @@ def update_repo(
     repo_path: str,
     persist_dir: str,
     embedding: EmbeddingConfig,
+    vector: VectorConfig,
 ) -> IndexSummary:
-    _, summary = rebuild_repo_index(repo_path, persist_dir, embedding)
+    _, summary = rebuild_repo_index(repo_path, persist_dir, embedding, vector)
     return summary
