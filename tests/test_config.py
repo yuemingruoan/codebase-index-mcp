@@ -40,6 +40,7 @@ def test_repo_config_roundtrip(tmp_path):
         chunking=chunking,
         milvus=milvus,
         files={"src/app.py": RepoFileMeta(hash="abc", line_count=12)},
+        chunks_indexed=7,
         last_indexed_at="2024-01-01T00:00:00Z",
         last_indexed_commit="deadbeef",
     )
@@ -49,3 +50,4 @@ def test_repo_config_roundtrip(tmp_path):
     assert loaded.embedding.model == config.embedding.model
     assert loaded.chunking.chunk_lines == config.chunking.chunk_lines
     assert loaded.files["src/app.py"].hash == "abc"
+    assert loaded.chunks_indexed == 7

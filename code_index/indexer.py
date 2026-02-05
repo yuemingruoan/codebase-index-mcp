@@ -75,6 +75,57 @@ def _batched(items: list, batch_size: int) -> Iterable[list]:
         yield items[i : i + batch_size]
 
 
+def _collect_chunks(
+    repo_root: str, tracked_files: list[str], chunking: ChunkingConfig
+) -> tuple[list[tuple[str, int, int, str, str]], dict[str, RepoFileMeta]]:
+    chunks: list[tuple[str, int, int, str, str]] = []
+    file_metas: dict[str, RepoFileMeta] = {}
+    for rel_path in tracked_files:
+        abs_path = os.path.join(repo_root, rel_path)
+        if not os.path.isfile(abs_path):
+            continue
+        if not is_text_file(abs_path):
+            continue
+        text = read_text_file(abs_path)
+        file_hash = sha256_file(abs_path)
+        file_chunks = chunk_text(text, chunking.chunk_lines, chunking.overlap_lines)
+        if not file_chunks:
+            continue
+        file_metas[rel_path] = RepoFileMeta(hash=file_hash, line_count=len(text.splitlines()))
+        for chunk in file_chunks:
+            chunks.append((rel_path, chunk.line_start, chunk.line_end, chunk.text, file_hash))
+    return chunks, file_metas
+
+
+def _embed_and_insert(
+    chunks: list[tuple[str, int, int, str, str]],
+    embedding_client: EmbeddingClient,
+    store: VectorStore,
+    *,
+    batch_size: int,
+    dimension: int | None = None,
+) -> tuple[int, int | None]:
+    total_inserted = 0
+    for batch in _batched(chunks, batch_size):
+        texts = [item[3] for item in batch]
+        embeddings = embedding_client.embed_texts(texts)
+        if embeddings and dimension is None:
+            dimension = len(embeddings[0])
+            store.ensure_collection(dimension)
+        records = [
+            VectorRecord(
+                embedding=embeddings[idx],
+                path=batch[idx][0],
+                line_start=batch[idx][1],
+                line_end=batch[idx][2],
+                file_hash=batch[idx][4],
+            )
+            for idx in range(len(batch))
+        ]
+        total_inserted += store.insert(records)
+    return total_inserted, dimension
+
+
 def init_repo_index(
     repo_path: str,
     persist_dir: str,
@@ -99,45 +150,14 @@ def init_repo_index(
     config = new_repo_config(repo_root, repo_hash, idx_dir, embedding, chunking, milvus)
 
     tracked_files = list_tracked_files(repo_root)
-    chunks: list[tuple[str, int, int, str, str]] = []
-    file_metas: dict[str, RepoFileMeta] = {}
-    for rel_path in tracked_files:
-        abs_path = os.path.join(repo_root, rel_path)
-        if not os.path.isfile(abs_path):
-            continue
-        if not is_text_file(abs_path):
-            continue
-        text = read_text_file(abs_path)
-        file_hash = sha256_file(abs_path)
-        file_chunks = chunk_text(text, chunking.chunk_lines, chunking.overlap_lines)
-        if not file_chunks:
-            continue
-        file_metas[rel_path] = RepoFileMeta(hash=file_hash, line_count=len(text.splitlines()))
-        for chunk in file_chunks:
-            chunks.append((rel_path, chunk.line_start, chunk.line_end, chunk.text, file_hash))
+    chunks, file_metas = _collect_chunks(repo_root, tracked_files, chunking)
 
     embedding_client = EmbeddingClient(embedding)
     store = VectorStore(milvus)
 
-    total_inserted = 0
-    dimension: int | None = None
-    for batch in _batched(chunks, DEFAULT_BATCH_SIZE):
-        texts = [item[3] for item in batch]
-        embeddings = embedding_client.embed_texts(texts)
-        if embeddings and dimension is None:
-            dimension = len(embeddings[0])
-            store.ensure_collection(dimension)
-        records = [
-            VectorRecord(
-                embedding=embeddings[idx],
-                path=batch[idx][0],
-                line_start=batch[idx][1],
-                line_end=batch[idx][2],
-                file_hash=batch[idx][4],
-            )
-            for idx in range(len(batch))
-        ]
-        total_inserted += store.insert(records)
+    total_inserted, dimension = _embed_and_insert(
+        chunks, embedding_client, store, batch_size=DEFAULT_BATCH_SIZE
+    )
     embedding_client.close()
 
     config.milvus = MilvusConfig(
@@ -147,6 +167,62 @@ def init_repo_index(
         metric_type=milvus.metric_type,
     )
     config.files = file_metas
+    config.chunks_indexed = total_inserted
+    config.last_indexed_at = _utc_now_iso()
+    config.last_indexed_commit = get_head_commit(repo_root)
+    config_path = save_repo_config(config)
+
+    summary = IndexSummary(
+        repo_root=repo_root,
+        repo_hash=repo_hash,
+        index_dir=idx_dir,
+        config_path=config_path,
+        files_indexed=len(file_metas),
+        chunks_indexed=total_inserted,
+    )
+    return config, summary
+
+
+def rebuild_repo_index(
+    repo_path: str,
+    persist_dir: str,
+    embedding: EmbeddingConfig,
+    *,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+) -> tuple[RepoConfig, IndexSummary]:
+    if not is_git_repo(repo_path):
+        raise IndexingError("NOT_GIT_REPO")
+    repo_root = get_repo_root(repo_path)
+    repo_hash = hash_repo_path(repo_root)
+    repo_root = normalize_repo_path(repo_root)
+    idx_dir = index_dir(persist_dir, repo_hash)
+    if not os.path.exists(idx_dir):
+        raise IndexingError("NOT_INITIALIZED")
+    config = load_repo_config(idx_dir)
+    vectors_dir = os.path.join(idx_dir, "vectors")
+    os.makedirs(vectors_dir, exist_ok=True)
+
+    store = VectorStore(config.milvus)
+    store.drop()
+
+    config.embedding = embedding
+    tracked_files = list_tracked_files(repo_root)
+    chunks, file_metas = _collect_chunks(repo_root, tracked_files, config.chunking)
+
+    embedding_client = EmbeddingClient(embedding)
+    total_inserted, dimension = _embed_and_insert(
+        chunks, embedding_client, store, batch_size=batch_size
+    )
+    embedding_client.close()
+
+    config.milvus = MilvusConfig(
+        uri=config.milvus.uri,
+        collection=config.milvus.collection,
+        dimension=dimension,
+        metric_type=config.milvus.metric_type,
+    )
+    config.files = file_metas
+    config.chunks_indexed = total_inserted
     config.last_indexed_at = _utc_now_iso()
     config.last_indexed_commit = get_head_commit(repo_root)
     config_path = save_repo_config(config)
@@ -210,8 +286,9 @@ def incremental_update(
     store = VectorStore(config.milvus)
     if config.milvus.dimension is not None:
         store.ensure_collection(config.milvus.dimension)
+    deleted_count = 0
     if to_delete:
-        store.delete_by_paths(to_delete)
+        deleted_count = store.delete_by_paths(to_delete)
         for path in to_delete:
             config.files.pop(path, None)
 
@@ -260,6 +337,7 @@ def incremental_update(
             dimension=dimension,
             metric_type=config.milvus.metric_type,
         )
+    config.chunks_indexed = max(config.chunks_indexed - deleted_count, 0) + total_inserted
     config.last_indexed_at = _utc_now_iso()
     config.last_indexed_commit = get_head_commit(repo_root)
     config_path = save_repo_config(config)

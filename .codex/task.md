@@ -110,7 +110,7 @@
 | T3 | Milvus Lite 存储层 | [x] | AI | 以 `pymilvus` Lite 模式创建 collection；设计 schema（vector + path + line_start + line_end + file_hash）；实现 insert/search/delete；支持按文件删除 | `pytest -q` 通过；手测 insert/search 返回结果 |
 | T4 | 索引流水线（初始化） | [x] | AI | 使用 `git ls-files` 枚举已跟踪文件；文本检测过滤二进制；按行切分并记录行号范围；初始化时自动决定 chunk 策略并写入配置；批量 embedding 与入库 | 在小仓库执行 `code-index init <repo>`，索引数与 chunk 数合理 |
 | T5 | 增量更新与删除处理 | [x] | AI | 基于 git 变更检测（tracked 文件列表 + 内容 hash）识别新增/修改/删除；删除已移除文件的向量记录；更新元数据；增量更新与 search 入口联动 | 修改/删除文件后执行 `code-index search` 或增量入口，结果更新且无旧记录 |
-| T6 | MCP 工具与 CLI | [ ] | AI | 使用 MCP Python SDK 注册工具：init/search/status/update；按 MCP 工具规范实现输入输出与错误码；update 修改配置并触发全量重建；search 输出相对路径与行号范围 | `code-index serve` 启动；MCP 工具调用返回 JSON 符合约定 |
+| T6 | MCP 工具与 CLI | [x] | AI | 使用 MCP Python SDK 注册工具：init/search/status/update；按 MCP 工具规范实现输入输出与错误码；update 修改配置并触发全量重建；search 输出相对路径与行号范围 | `code-index serve` 启动；MCP 工具调用返回 JSON 符合约定 |
 | T7 | 测试与文档 | [ ] | AI | 增加单测与简单集成测试；更新 README（安装、init、search、update、持久化目录说明）；补充故障排查 | `pytest -q` 通过；README 示例可复现 |
 
 ## 里程碑与顺序

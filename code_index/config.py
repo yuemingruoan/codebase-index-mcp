@@ -104,6 +104,7 @@ class RepoConfig:
     chunking: ChunkingConfig
     milvus: MilvusConfig
     files: dict[str, RepoFileMeta] = field(default_factory=dict)
+    chunks_indexed: int = 0
     last_indexed_at: str | None = None
     last_indexed_commit: str | None = None
 
@@ -117,6 +118,7 @@ class RepoConfig:
             "chunking": self.chunking.to_dict(),
             "milvus": self.milvus.to_dict(),
             "files": {path: meta.to_dict() for path, meta in self.files.items()},
+            "chunks_indexed": self.chunks_indexed,
             "last_indexed_at": self.last_indexed_at,
             "last_indexed_commit": self.last_indexed_commit,
         }
@@ -133,6 +135,7 @@ class RepoConfig:
             chunking=ChunkingConfig.from_dict(data["chunking"]),
             milvus=MilvusConfig.from_dict(data["milvus"]),
             files={path: RepoFileMeta.from_dict(meta) for path, meta in files.items()},
+            chunks_indexed=int(data.get("chunks_indexed", 0)),
             last_indexed_at=data.get("last_indexed_at"),
             last_indexed_commit=data.get("last_indexed_commit"),
         )
@@ -220,6 +223,7 @@ def new_repo_config(
         chunking=chunking,
         milvus=milvus,
         files={},
+        chunks_indexed=0,
         last_indexed_at=_utc_now_iso(),
         last_indexed_commit=None,
     )
