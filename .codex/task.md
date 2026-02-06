@@ -31,13 +31,13 @@
 ## 工作项清单
 | ID | 内容 | 完成状态 | 负责人 | 实施要点 | 验证方式 |
 | --- | --- | --- | --- | --- | --- |
-| T1 | 配置与参数设计 | [ ] | AI | 更新 `code_index/config.py`：新增 VectorConfig(device/metric/search_mode/approx_params/max_vram_mb)，替换 MilvusConfig；支持 `CODE_INDEX_MAX_VRAM_MB` 默认值；调整 RepoConfig 序列化；更新 `mcp_server.py`/`cli.py` 输入 schema 与参数（`--device`/`--search-mode`/`--metric`/`--approx-sample-rate`/`--max-vram-mb`） | `pytest -q tests/test_config.py`；`code-index init --help` 包含新参数 |
-| T2 | 设备检测与路由 | [ ] | AI | 新增 `code_index/device.py`：检测 CUDA/MPS；实现 auto 选择与 CPU 回退；提供统一 `resolve_device()` 给向量后端使用 | 新增/更新 `tests/test_device.py`；`pytest -q tests/test_device.py` |
-| T3 | 向量存储后端 | [ ] | AI | 实现 `VectorStore` 抽象；新增 TorchVectorStore（CPU/CUDA/MPS，矩阵乘法+topk，依据 max_vram_mb 分块计算）；定义持久化格式：`vectors/embeddings.pt`、`vectors/meta.json` | 新增 `tests/test_vector_store.py`；`pytest -q tests/test_vector_store.py` |
-| T4 | 索引/增量流程改造 | [ ] | AI | 更新 `code_index/indexer.py`/`operations.py` 调用新 VectorStore；处理 delete/insert 与必要的 index 重建；search_mode=approx 时按采样参数缩减候选并记录 | `pytest -q tests/test_incremental.py`；手测 `code-index init/search` |
-| T5 | CLI/MCP 兼容与默认策略 | [ ] | AI | search 工具增加 `search_mode`/`device` 参数；init/update 增加 vector 配置参数；默认 auto 检测 GPU；出错时返回清晰错误码 | `pytest -q tests/test_cli.py`；MCP 工具调用参数校验 |
-| T6 | 依赖与打包 | [ ] | AI | 更新 `pyproject.toml` 依赖（`torch` 必需）；补充安装时显存上限说明与回退策略 | `python -m pip install -e .` 无错误（后续执行） |
-| T7 | 文档与示例 | [ ] | AI | 更新 `README.md`：GPU 支持、设备/检索参数、回退策略、示例命令 | 目视检查 README 示例可执行 |
+| T1 | 配置与参数设计 | [x] | AI | 更新 `code_index/config.py`：新增 VectorConfig(device/metric/search_mode/approx_params/max_vram_mb)，替换 MilvusConfig；支持 `CODE_INDEX_MAX_VRAM_MB` 默认值；调整 RepoConfig 序列化；更新 `mcp_server.py`/`cli.py` 输入 schema 与参数（`--device`/`--search-mode`/`--metric`/`--approx-sample-rate`/`--max-vram-mb`） | `pytest -q tests/test_config.py`；`code-index init --help` 包含新参数 |
+| T2 | 设备检测与路由 | [x] | AI | 新增 `code_index/device.py`：检测 CUDA/MPS；实现 auto 选择与 CPU 回退；提供统一 `resolve_device()` 给向量后端使用 | 新增/更新 `tests/test_device.py`；`pytest -q tests/test_device.py` |
+| T3 | 向量存储后端 | [x] | AI | 实现 `VectorStore` 抽象；新增 TorchVectorStore（CPU/CUDA/MPS，矩阵乘法+topk，依据 max_vram_mb 分块计算）；定义持久化格式：`vectors/embeddings.pt`、`vectors/meta.json` | 新增 `tests/test_vector_store.py`；`pytest -q tests/test_vector_store.py` |
+| T4 | 索引/增量流程改造 | [x] | AI | 更新 `code_index/indexer.py`/`operations.py` 调用新 VectorStore；处理 delete/insert 与必要的 index 重建；search_mode=approx 时按采样参数缩减候选并记录 | `pytest -q tests/test_incremental.py`；手测 `code-index init/search` |
+| T5 | CLI/MCP 兼容与默认策略 | [x] | AI | search 工具增加 `search_mode`/`device` 参数；init/update 增加 vector 配置参数；默认 auto 检测 GPU；出错时返回清晰错误码 | `pytest -q tests/test_cli.py`；MCP 工具调用参数校验 |
+| T6 | 依赖与打包 | [x] | AI | 更新 `pyproject.toml` 依赖（`torch` 必需）；补充安装时显存上限说明与回退策略 | `python -m pip install -e .` 无错误（后续执行） |
+| T7 | 文档与示例 | [x] | AI | 更新 `README.md`：GPU 支持、设备/检索参数、回退策略、示例命令 | 目视检查 README 示例可执行 |
 
 ## 里程碑与顺序
 - M1：配置与设备选择（T1, T2）

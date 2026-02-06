@@ -55,29 +55,80 @@ class ChunkingConfig:
         )
 
 
+def _parse_positive_int(value: Any, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise ValueError(f"{name} must be an integer") from exc
+    if parsed <= 0:
+        raise ValueError(f"{name} must be > 0")
+    return parsed
+
+
+def _max_vram_mb_from_env() -> int | None:
+    raw = os.environ.get("CODE_INDEX_MAX_VRAM_MB")
+    if raw is None or raw == "":
+        return None
+    return _parse_positive_int(raw, name="CODE_INDEX_MAX_VRAM_MB")
+
+
 @dataclass(frozen=True)
-class MilvusConfig:
-    uri: str
-    collection: str
-    dimension: int | None
-    metric_type: str = "IP"
+class ApproxConfig:
+    sample_rate: float = 0.2
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"sample_rate": self.sample_rate}
+
+    @staticmethod
+    def from_dict(data: dict[str, Any] | None) -> "ApproxConfig":
+        if not data:
+            return ApproxConfig()
+        sample_rate = float(data.get("sample_rate", 0.2))
+        if not 0 < sample_rate <= 1:
+            raise ValueError("approx.sample_rate must be in (0, 1]")
+        return ApproxConfig(sample_rate=sample_rate)
+
+
+@dataclass(frozen=True)
+class VectorConfig:
+    device: str
+    metric: str
+    search_mode: str
+    approx: ApproxConfig
+    max_vram_mb: int | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "uri": self.uri,
-            "collection": self.collection,
-            "dimension": self.dimension,
-            "metric_type": self.metric_type,
+            "device": self.device,
+            "metric": self.metric,
+            "search_mode": self.search_mode,
+            "approx": self.approx.to_dict(),
+            "max_vram_mb": self.max_vram_mb,
         }
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> "MilvusConfig":
-        dimension = data.get("dimension")
-        return MilvusConfig(
-            uri=str(data["uri"]),
-            collection=str(data["collection"]),
-            dimension=None if dimension is None else int(dimension),
-            metric_type=str(data.get("metric_type", "IP")),
+    def from_dict(data: dict[str, Any]) -> "VectorConfig":
+        device = str(data.get("device", "auto")).lower()
+        if device not in {"auto", "cuda", "mps", "cpu"}:
+            raise ValueError("vector.device must be one of auto/cuda/mps/cpu")
+        metric = str(data.get("metric", "ip")).lower()
+        if metric not in {"ip", "l2"}:
+            raise ValueError("vector.metric must be one of ip/l2")
+        search_mode = str(data.get("search_mode", "exact")).lower()
+        if search_mode not in {"exact", "approx"}:
+            raise ValueError("vector.search_mode must be one of exact/approx")
+        approx = ApproxConfig.from_dict(data.get("approx"))
+        max_vram_mb = data.get("max_vram_mb")
+        if max_vram_mb is None:
+            max_vram_mb = _max_vram_mb_from_env()
+        else:
+            max_vram_mb = _parse_positive_int(max_vram_mb, name="max_vram_mb")
+        return VectorConfig(
+            device=device,
+            metric=metric,
+            search_mode=search_mode,
+            approx=approx,
+            max_vram_mb=max_vram_mb,
         )
 
 
@@ -102,7 +153,7 @@ class RepoConfig:
     index_dir: str
     embedding: EmbeddingConfig
     chunking: ChunkingConfig
-    milvus: MilvusConfig
+    vector: VectorConfig
     files: dict[str, RepoFileMeta] = field(default_factory=dict)
     chunks_indexed: int = 0
     last_indexed_at: str | None = None
@@ -116,7 +167,7 @@ class RepoConfig:
             "index_dir": self.index_dir,
             "embedding": self.embedding.to_dict(),
             "chunking": self.chunking.to_dict(),
-            "milvus": self.milvus.to_dict(),
+            "vector": self.vector.to_dict(),
             "files": {path: meta.to_dict() for path, meta in self.files.items()},
             "chunks_indexed": self.chunks_indexed,
             "last_indexed_at": self.last_indexed_at,
@@ -133,7 +184,7 @@ class RepoConfig:
             index_dir=str(data["index_dir"]),
             embedding=EmbeddingConfig.from_dict(data["embedding"]),
             chunking=ChunkingConfig.from_dict(data["chunking"]),
-            milvus=MilvusConfig.from_dict(data["milvus"]),
+            vector=VectorConfig.from_dict(data["vector"]),
             files={path: RepoFileMeta.from_dict(meta) for path, meta in files.items()},
             chunks_indexed=int(data.get("chunks_indexed", 0)),
             last_indexed_at=data.get("last_indexed_at"),
@@ -212,7 +263,7 @@ def new_repo_config(
     index_dir: str,
     embedding: EmbeddingConfig,
     chunking: ChunkingConfig,
-    milvus: MilvusConfig,
+    vector: VectorConfig,
 ) -> RepoConfig:
     return RepoConfig(
         version=SCHEMA_VERSION,
@@ -221,7 +272,7 @@ def new_repo_config(
         index_dir=index_dir,
         embedding=embedding,
         chunking=chunking,
-        milvus=milvus,
+        vector=vector,
         files={},
         chunks_indexed=0,
         last_indexed_at=_utc_now_iso(),

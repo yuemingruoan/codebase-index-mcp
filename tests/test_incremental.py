@@ -1,4 +1,11 @@
-from code_index.config import ChunkingConfig, EmbeddingConfig, MilvusConfig, RepoConfig, RepoFileMeta
+from code_index.config import (
+    ApproxConfig,
+    ChunkingConfig,
+    EmbeddingConfig,
+    RepoConfig,
+    RepoFileMeta,
+    VectorConfig,
+)
 from code_index.indexer import compute_incremental_plan
 
 
@@ -15,7 +22,13 @@ def test_compute_incremental_plan(tmp_path):
         index_dir=str(repo_root),
         embedding=EmbeddingConfig(base_url="http://example", api_key="k", model="m"),
         chunking=ChunkingConfig(chunk_lines=10, overlap_lines=0),
-        milvus=MilvusConfig(uri="milvus.db", collection="c", dimension=None),
+        vector=VectorConfig(
+            device="auto",
+            metric="ip",
+            search_mode="exact",
+            approx=ApproxConfig(sample_rate=1.0),
+            max_vram_mb=None,
+        ),
         files={
             "a.py": RepoFileMeta(hash="old", line_count=1),
             "removed.py": RepoFileMeta(hash="gone", line_count=1),
