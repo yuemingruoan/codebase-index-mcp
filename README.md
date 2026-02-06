@@ -45,6 +45,7 @@ code-index search /abs/path/to/repo "query text" --persist-dir /abs/path/to/pers
 Skip refresh:
 ```bash
 code-index search /abs/path/to/repo "query text" --persist-dir /abs/path/to/persist --no-refresh
+```
 
 Override device/search settings for one query:
 ```bash
@@ -54,7 +55,6 @@ code-index search /abs/path/to/repo "query text" \
   --search-mode approx \
   --approx-sample-rate 0.3 \
   --max-vram-mb 1024
-```
 ```
 
 Status:
@@ -78,6 +78,11 @@ code-index update /abs/path/to/repo \
 
 You can also set `CODE_INDEX_PERSIST_DIR` to avoid passing `--persist-dir` each time.
 Set `CODE_INDEX_MAX_VRAM_MB` to define a default VRAM budget for searches/indexing.
+
+Notes:
+- `--device auto` selects CUDA first, then MPS, then CPU; explicit CUDA/MPS falls back to CPU if unavailable.
+- `--search-mode approx` samples candidates based on `--approx-sample-rate` (lower is faster, lower recall).
+- `--metric` supports `ip` (default) or `l2`.
 
 ## MCP Server
 Start the MCP server:
